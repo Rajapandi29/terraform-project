@@ -7,9 +7,6 @@ on:
     types:
       - completed
 
-# ==================================================
-# CRITICAL FIX 1: ELEVATE ACTIONS READ PERMISSIONS
-# ==================================================
 permissions:
   contents: read
   actions: read   # Explicitly grants access to download cross-workflow out-file artifacts
@@ -37,14 +34,13 @@ jobs:
         run: |
           echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
 
-      # CRITICAL FIX 2: Ensure target directories exist before running the extraction
       - name: Download Plan Artifact Pack
         env:
           GH_TOKEN: ${{ github.token }}
           PLAN_RUN_ID: ${{ github.event.workflow_run.id }}
           PLAN_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          mkdir -p diff-status  # Generates path to prevent write permission blocks
+          mkdir -p diff-status
           gh run download "$PLAN_RUN_ID" \
             --repo "${{ github.repository }}" \
             --name "terraform-plan-${PLAN_SHA}"

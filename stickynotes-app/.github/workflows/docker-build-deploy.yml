@@ -1,9 +1,12 @@
 name: Stickynotes Docker Build Push Deploy
 
+# REUSABLE TRIGGER MATRIX CONFIG
 on:
-  push:
-    branches:
-      - main
+  workflow_call:
+    inputs:
+      commit_sha:
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -15,15 +18,15 @@ env:
   ECS_SERVICE: stickynotes-app-service
 
 jobs:
-
   build-push-deploy:
     name: Stickynotes Build Push Deploy
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha }}
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -51,19 +54,18 @@ jobs:
             --region "$AWS_REGION" \
             --query 'repositories[0].repositoryUri' \
             --output text)
-
           echo "ECR_URI=$ECR_URI" >> "$GITHUB_ENV"
 
       - name: Build Docker Image
         run: |
           docker build \
-            -t "$ECR_URI:${GITHUB_SHA}" \
+            -t "$ECR_URI:${{ inputs.commit_sha }}" \
             -t "$ECR_URI:latest" \
             ./stickynotes-app
 
       - name: Push SHA Image
         run: |
-          docker push "$ECR_URI:${GITHUB_SHA}"
+          docker push "$ECR_URI:${{ inputs.commit_sha }}"
 
       - name: Push Latest Image
         run: |
