@@ -6,7 +6,11 @@ variable "aws_region" {
   description = "Region selection"
   type        = string
 }
-
+variable "image_tag" {
+  description = "Docker image tag"
+  type        = string
+  default     = "latest"
+}
 
 variable "cidr" {
   description = "VPC CIDR"
