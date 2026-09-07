@@ -47,6 +47,7 @@ jobs:
       - name: Read Change Status
         id: read-status
         run: |
+          # Read metadata details precisely 
           echo "eticket=$(cat diff-status/eticket.txt)" >> "$GITHUB_OUTPUT"
           echo "stickynotes=$(cat diff-status/stickynotes.txt)" >> "$GITHUB_OUTPUT"
 

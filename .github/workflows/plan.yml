@@ -25,7 +25,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0 # Full dynamic git history reference-kaga fetch-depth 0 aakiyachu
 
       # -----------------------------------------------
       # Check folder diff changes
@@ -34,7 +34,7 @@ jobs:
         id: filter
         uses: dorny/paths-filter@v3
         with:
-          base: 'HEAD~1'
+          base: ${{ github.event.before }} # Git push-ku munnadi iruntha hash snapshot code edukum
           filters: |
             eticket:
               - 'eticket-app/**'

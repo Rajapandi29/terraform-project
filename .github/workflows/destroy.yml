@@ -1,7 +1,7 @@
 name: Terraform Destroy
 
 on:
-  workflow_dispatch: # Actions tab-la poi manual button moolama run panra option
+  workflow_dispatch:
 
 permissions:
   contents: read
