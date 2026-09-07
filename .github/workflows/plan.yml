@@ -44,8 +44,9 @@ jobs:
         run: |
           terraform plan \
             -input=false \
-            -out=tfplan \
-            -var="image_tag=${GITHUB_SHA}"
+            -var-file="terraform.tfvars" \
+            -var="image_tag=${GITHUB_SHA}" \
+            -out=tfplan
 
       - name: Terraform Show
         working-directory: terraform
