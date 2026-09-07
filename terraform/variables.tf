@@ -2,7 +2,10 @@ variable "name" {
   description = "Application/environment name"
   type        = string
 }
-
+variable "aws_region" {
+  description = "Region selection"
+  type        = string
+}
 
 
 variable "cidr" {
