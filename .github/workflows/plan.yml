@@ -14,7 +14,7 @@ env:
 
 jobs:
   plan-and-filter:
-    name: Terraform Plan & Diff Detection
+    name: Terraform Plan & Out File Generation
     runs-on: ubuntu-latest
     
     outputs:
@@ -25,32 +25,28 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Full dynamic git history reference-kaga fetch-depth 0 aakiyachu
+          fetch-depth: 0
 
-      # -----------------------------------------------
-      # Check folder diff changes
-      # -----------------------------------------------
+      # 1. Path checking
       - name: Path Filter Configuration
         id: filter
         uses: dorny/paths-filter@v3
         with:
-          base: ${{ github.event.before }} # Git push-ku munnadi iruntha hash snapshot code edukum
+          base: ${{ github.event.before || 'HEAD~1' }}
           filters: |
             eticket:
               - 'eticket-app/**'
             stickynotes:
               - 'stickynotes-app/**'
 
-      # Save folder change status into a file for Apply workflow
-      - name: Save changes status artifact
+      # 2. Saving status directly into temporary execution matrix
+      - name: Save changes status file
         run: |
           mkdir -p diff-status
           echo "${{ steps.filter.outputs.eticket }}" > diff-status/eticket.txt
           echo "${{ steps.filter.outputs.stickynotes }}" > diff-status/stickynotes.txt
 
-      # -----------------------------------------------
-      # AWS, Terraform Setup & Run Plan
-      # -----------------------------------------------
+      # 3. AWS & Terraform core logic integration
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -61,16 +57,16 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-      - name: Terraform Init & Plan
+      # 4. EXPLICIT OUT FILE GENERATION
+      - name: Terraform Init & Plan Out
         working-directory: terraform
         run: |
           terraform init -input=false
+          # Inga thaan -out flag moolama dynamic file out generate aaguthu
           terraform plan -input=false -out=tfplan
 
-      # -----------------------------------------------
-      # Upload exact tfplan and diff status
-      # -----------------------------------------------
-      - name: Upload Plan & Diff Status
+      # 5. UPLOAD BINARY FILE AS ARTIFACT
+      - name: Upload Plan Out File & Diffs
         uses: actions/upload-artifact@v4
         with:
           name: terraform-plan-${{ github.sha }}
