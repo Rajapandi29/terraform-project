@@ -17,10 +17,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
+      # ---------------------------------------------
+      # Checkout
+      # ---------------------------------------------
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ---------------------------------------------
+      # AWS Credentials
+      # ---------------------------------------------
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -28,40 +33,62 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      # ---------------------------------------------
+      # Terraform
+      # ---------------------------------------------
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
+      # ---------------------------------------------
+      # Terraform Init
+      # ---------------------------------------------
       - name: Terraform Init
         working-directory: terraform
         run: terraform init -input=false
 
+      # ---------------------------------------------
+      # Terraform Validate
+      # ---------------------------------------------
       - name: Terraform Validate
         working-directory: terraform
         run: terraform validate
 
+      # ---------------------------------------------
+      # Terraform Plan
+      # ---------------------------------------------
       - name: Terraform Plan
         working-directory: terraform
         run: |
           terraform plan \
             -input=false \
-            -var-file="terraform.tfvars" \
-            -var="image_tag=${GITHUB_SHA}" \
-            -out=tfplan
+            -out=tfplan \
+            -var="image_tag=${GITHUB_SHA}"
 
+      # ---------------------------------------------
+      # Show Plan
+      # ---------------------------------------------
       - name: Terraform Show
         working-directory: terraform
         run: terraform show -no-color tfplan
 
-      - name: Verify Plan
+      # ---------------------------------------------
+      # Verify Plan
+      # ---------------------------------------------
+      - name: Verify Terraform Plan
         working-directory: terraform
         run: |
           test -f tfplan
+
+          echo "Terraform plan created successfully:"
           ls -lh tfplan
 
+      # ---------------------------------------------
+      # Upload Exact Plan
+      # ---------------------------------------------
       - name: Upload Terraform Plan
         uses: actions/upload-artifact@v4
         with:
           name: terraform-plan-${{ github.sha }}
           path: terraform/tfplan
-          retention-days: 1
           if-no-files-found: error
+          retention-days: 1
