@@ -1,40 +1,157 @@
-name: Apply
+name: Terraform Apply
 
 on:
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows:
+      - Terraform Plan
+    types:
+      - completed
+
+permissions:
+  contents: read
+  actions: read
 
 env:
   AWS_REGION: ap-south-1
 
 jobs:
+
+  check-plan:
+    name: Check Plan Workflow
+    runs-on: ubuntu-latest
+
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    outputs:
+      commit_sha: ${{ steps.commit.outputs.sha }}
+
+    steps:
+      - name: Get Plan Commit SHA
+        id: commit
+        run: |
+          echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+
+
+  # --------------------------------------------------
+  # 2. Build Eticket Docker image
+  # --------------------------------------------------
+  eticket:
+    name: Build Eticket Image
+
+    needs: check-plan
+
+    uses: ./.github/workflows/eticket-docker.yml
+
+    with:
+      commit_sha: ${{ needs.check-plan.outputs.commit_sha }}
+
+    secrets: inherit
+
+
+  # --------------------------------------------------
+  # 3. Build Stickynotes Docker image
+  # --------------------------------------------------
+  stickynotes:
+    name: Build Stickynotes Image
+
+    needs: check-plan
+
+    uses: ./.github/workflows/stickynotes-docker.yml
+
+    with:
+      commit_sha: ${{ needs.check-plan.outputs.commit_sha }}
+
+    secrets: inherit
+
+
+  # --------------------------------------------------
+  # 4. Terraform Apply
+  # --------------------------------------------------
   apply:
-    name: Terraform apply
+    name: Apply Terraform Plan
+
+    needs:
+      - check-plan
+      - eticket
+      - stickynotes
+
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+
+      # Checkout the SAME commit used by Terraform Plan
+      - name: Checkout Exact Commit
         uses: actions/checkout@v4
+
+        with:
+          ref: ${{ needs.check-plan.outputs.commit_sha }}
+
+
+      # AWS login
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
+
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
+
+
+      # Terraform
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
+
+
+      # Terraform Init
       - name: Terraform Init
         working-directory: terraform
-        run: terraform init -upgrade
-      - name: Terraform Validate
+        run: terraform init
+
+
+      # --------------------------------------------------
+      # Download EXACT tfplan from Terraform Plan run
+      # --------------------------------------------------
+      - name: Download Terraform Plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLAN_RUN_ID: ${{ github.event.workflow_run.id }}
+          PLAN_SHA: ${{ needs.check-plan.outputs.commit_sha }}
+
+        run: |
+          mkdir -p terraform
+
+          gh run download "$PLAN_RUN_ID" \
+            --repo "${{ github.repository }}" \
+            --name "terraform-plan-${PLAN_SHA}" \
+            --dir terraform
+
+
+      # Verify tfplan exists
+      - name: Verify Terraform Plan
         working-directory: terraform
-        run: terraform validate
-      - uses: /eticket-app/.github/workflows/docker-build-deploy.yml
-        using: /eticket-app/.github/workflows/docker-build-deploy.yml
-      - uses: /stickynotes-app/.github/workflows/docker-build-deploy.yml
-        using: /stickynotes-app/.github/workflows/docker-build-deploy.yml
-      - name: Terraform Apply
+
+        run: |
+          if [ ! -f tfplan ]; then
+            echo "ERROR: tfplan file does not exist."
+            echo "Terraform apply is stopped."
+            exit 1
+          fi
+
+          echo "Terraform plan found:"
+          ls -lh tfplan
+
+
+      # Display exact saved plan
+      - name: Terraform Show Plan
         working-directory: terraform
-        run: terraform apply -auto-approve
-      
+
+        run: |
+          terraform show -no-color tfplan
+
+
+      # Apply EXACT saved plan
+      - name: Terraform Apply Exact Plan
+        working-directory: terraform
+
+        run: |
+          terraform apply -auto-approve tfplan

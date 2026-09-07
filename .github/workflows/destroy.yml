@@ -1,33 +1,76 @@
-name: Destroy
+name: Eticket Docker Build Deploy
 
 on:
-  push:
-    branches:
-      - main
+  workflow_call:
+    inputs:
+      commit_sha:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
 env:
   AWS_REGION: ap-south-1
+  ECR_REPOSITORY: eticket-app-repo
+  ECS_CLUSTER: app-cluster
+  ECS_SERVICE: eticket-app-service
+
 jobs:
-  destroy:
-    name: Terraform destroy
-    runs-on: ubuntu-latest      
+  build-push:
+    name: Build and Push Eticket
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout Exact Commit
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-      - name: Terraform Init
-        working-directory: terraform
-        run: terraform init -upgrade    
-      - name: Terraform Validate
-        working-directory: terraform
-        run: terraform validate 
-      - name: Terraform Destroy
-        working-directory: terraform
-        run: terraform destroy -auto-approve
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Create ECR Repository if not exists
+        run: |
+          aws ecr describe-repositories \
+            --repository-names "$ECR_REPOSITORY" \
+            --region "$AWS_REGION" \
+          || aws ecr create-repository \
+            --repository-name "$ECR_REPOSITORY" \
+            --region "$AWS_REGION" \
+            --image-tag-mutability MUTABLE \
+            --image-scanning-configuration scanOnPush=true
+
+      - name: Get ECR Repository URI
+        run: |
+          ECR_URI=$(aws ecr describe-repositories \
+            --repository-names "$ECR_REPOSITORY" \
+            --region "$AWS_REGION" \
+            --query 'repositories[0].repositoryUri' \
+            --output text)
+
+          echo "ECR_URI=$ECR_URI" >> "$GITHUB_ENV"
+
+          echo "ECR URI: $ECR_URI"
+
+      - name: Build Docker Image
+        run: |
+          docker build \
+            -t "$ECR_URI:${{ inputs.commit_sha }}" \
+            -t "$ECR_URI:latest" \
+            ./eticket-app
+
+      - name: Push Version Image
+        run: |
+          docker push "$ECR_URI:${{ inputs.commit_sha }}"
+
+      - name: Push Latest Image
+        run: |
+          docker push "$ECR_URI:latest"
