@@ -1,0 +1,83 @@
+name: docker-build-deploy
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ap-south-1
+  ECR_REPOSITORY: sticky-notes-repo
+  ECS_CLUSTER: app-cluster
+  ECS_SERVICE: stickynotes-service
+
+jobs:
+  apply:
+    name: Build Push Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init -upgrade
+
+      - name: Terraform Validate
+        working-directory: terraform
+        run: terraform validate
+
+      - name: Create ECR Repository
+        working-directory: terraform
+        run: |
+          terraform apply \
+            -auto-approve \
+            -target=module.ecr \
+            -var="image_tag=bootstrap"
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Get ECR Repository URI
+        run: |
+          ECR_URI=$(aws ecr describe-repositories \
+            --repository-names "$ECR_REPOSITORY" \
+            --region "$AWS_REGION" \
+            --query 'repositories[0].repositoryUri' \
+            --output text)
+
+          echo "ECR_URI=$ECR_URI" >> "$GITHUB_ENV"
+
+      - name: Build Docker Image
+        run: |
+          docker build \
+            -t "$ECR_URI:${GITHUB_SHA}" \
+            -t "$ECR_URI:latest" \
+            .
+
+      - name: Push Docker Image
+        run: |
+          docker push "$ECR_URI:${GITHUB_SHA}"
+          docker push "$ECR_URI:latest"
+
+      - name: Deploy to ECS
+        working-directory: terraform
+        run: |
+          terraform apply \
+            -auto-approve \
+            -target=module.ecs \
+            -var="image_tag=${GITHUB_SHA}"  
