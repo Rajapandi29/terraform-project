@@ -57,7 +57,7 @@ jobs:
   eticket:
     needs: check-plan
     if: ${{ needs.check-plan.outputs.eticket_changed == 'true' }}
-    uses: ./.github/workflows/eticket-docker.yml
+    uses: ./.github/workflows/docker-build-deploy.yml
     with:
       commit_sha: ${{ needs.check-plan.outputs.commit_sha }}
     secrets: inherit
@@ -65,7 +65,7 @@ jobs:
   stickynotes:
     needs: check-plan
     if: ${{ needs.check-plan.outputs.stickynotes_changed == 'true' }}
-    uses: ./.github/workflows/stickynotes-docker.yml
+    uses: ./.github/workflows/docker-build-deploy.yml
     with:
       commit_sha: ${{ needs.check-plan.outputs.commit_sha }}
     secrets: inherit
