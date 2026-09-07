@@ -1,7 +1,7 @@
 name: Terraform Destroy
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Actions tab-la poi manual button moolama run panra option
 
 permissions:
   contents: read
@@ -10,14 +10,12 @@ env:
   AWS_REGION: ap-south-1
 
 jobs:
-
-  destroy:
-    name: Destroy Terraform Infrastructure
+  terraform-destroy:
+    name: Terraform Destroy Infrastructure
     runs-on: ubuntu-latest
 
     steps:
-
-      - name: Checkout
+      - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Configure AWS Credentials
@@ -32,24 +30,10 @@ jobs:
 
       - name: Terraform Init
         working-directory: terraform
-        run: terraform init -input=false
-
-      - name: Terraform Destroy Plan
-        working-directory: terraform
         run: |
-          terraform plan \
-            -destroy \
-            -out=destroy.tfplan
-
-      - name: Terraform Show Destroy Plan
-        working-directory: terraform
-        run: |
-          terraform show -no-color destroy.tfplan
+          terraform init -input=false
 
       - name: Terraform Destroy
         working-directory: terraform
         run: |
-          terraform apply \
-            -input=false \
-            -auto-approve \
-            destroy.tfplan
+          terraform destroy -input=false -auto-approve

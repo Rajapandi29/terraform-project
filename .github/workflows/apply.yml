@@ -15,58 +15,64 @@ env:
   AWS_REGION: ap-south-1
 
 jobs:
-
   # ==================================================
-  # 1. CHECK TERRAFORM PLAN
+  # 1. READ PLAN & DETECT REUSABLE STATUS
   # ==================================================
   check-plan:
-    name: Check Terraform Plan
+    name: Check Plan & Read Diffs
     runs-on: ubuntu-latest
-
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
-
+    
     outputs:
       commit_sha: ${{ steps.commit.outputs.sha }}
+      eticket_changed: ${{ steps.read-status.outputs.eticket }}
+      stickynotes_changed: ${{ steps.read-status.outputs.stickynotes }}
 
     steps:
-
       - name: Get Plan Commit SHA
         id: commit
         run: |
           echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
 
+      - name: Download Plan Artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLAN_RUN_ID: ${{ github.event.workflow_run.id }}
+          PLAN_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          gh run download "$PLAN_RUN_ID" \
+            --repo "${{ github.repository }}" \
+            --name "terraform-plan-${PLAN_SHA}"
+
+      - name: Read Change Status
+        id: read-status
+        run: |
+          echo "eticket=$(cat diff-status/eticket.txt)" >> "$GITHUB_OUTPUT"
+          echo "stickynotes=$(cat diff-status/stickynotes.txt)" >> "$GITHUB_OUTPUT"
 
   # ==================================================
-  # 2. BUILD + PUSH + DEPLOY ETICKET
+  # 2. BUILD + PUSH + DEPLOY ETICKET (Conditional)
   # ==================================================
   eticket:
     name: Eticket Docker Build Push Deploy
-
     needs: check-plan
-
+    if: ${{ needs.check-plan.outputs.eticket_changed == 'true' }}
     uses: ./.github/workflows/eticket-docker.yml
-
     with:
       commit_sha: ${{ needs.check-plan.outputs.commit_sha }}
-
     secrets: inherit
 
-
   # ==================================================
-  # 3. BUILD + PUSH + DEPLOY STICKYNOTES
+  # 3. BUILD + PUSH + DEPLOY STICKYNOTES (Conditional)
   # ==================================================
   stickynotes:
     name: Stickynotes Docker Build Push Deploy
-
     needs: check-plan
-
+    if: ${{ needs.check-plan.outputs.stickynotes_changed == 'true' }}
     uses: ./.github/workflows/stickynotes-docker.yml
-
     with:
       commit_sha: ${{ needs.check-plan.outputs.commit_sha }}
-
     secrets: inherit
-
 
   # ==================================================
   # 4. TERRAFORM APPLY
@@ -74,26 +80,18 @@ jobs:
   apply:
     name: Terraform Apply
     runs-on: ubuntu-latest
-
     needs:
       - check-plan
       - eticket
       - stickynotes
+    if: always() && (needs.check-plan.result == 'success') && (needs.eticket.result == 'success' || needs.eticket.result == 'skipped') && (needs.stickynotes.result == 'success' || needs.stickynotes.result == 'skipped')
 
     steps:
-
-      # -----------------------------------------------
-      # Checkout EXACT commit from Terraform Plan
-      # -----------------------------------------------
       - name: Checkout Exact Commit
         uses: actions/checkout@v4
         with:
           ref: ${{ needs.check-plan.outputs.commit_sha }}
 
-
-      # -----------------------------------------------
-      # AWS Credentials
-      # -----------------------------------------------
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -101,72 +99,27 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-
-      # -----------------------------------------------
-      # Setup Terraform
-      # -----------------------------------------------
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-
-      # -----------------------------------------------
-      # Terraform Init
-      # -----------------------------------------------
       - name: Terraform Init
         working-directory: terraform
         run: |
           terraform init -input=false
 
-
-      # -----------------------------------------------
-      # Download EXACT tfplan
-      # -----------------------------------------------
       - name: Download Terraform Plan
         env:
           GH_TOKEN: ${{ github.token }}
           PLAN_RUN_ID: ${{ github.event.workflow_run.id }}
           PLAN_SHA: ${{ needs.check-plan.outputs.commit_sha }}
-
         run: |
           mkdir -p terraform
-
           gh run download "$PLAN_RUN_ID" \
             --repo "${{ github.repository }}" \
             --name "terraform-plan-${PLAN_SHA}" \
             --dir terraform
 
-
-      # -----------------------------------------------
-      # Verify Terraform Plan
-      # -----------------------------------------------
-      - name: Verify Terraform Plan
-        working-directory: terraform
-        run: |
-          if [ ! -f tfplan ]; then
-            echo "ERROR: tfplan does not exist"
-            exit 1
-          fi
-
-          echo "Terraform plan found:"
-          ls -lh tfplan
-
-
-      # -----------------------------------------------
-      # Show EXACT Plan
-      # -----------------------------------------------
-      - name: Terraform Show Plan
-        working-directory: terraform
-        run: |
-          terraform show -no-color tfplan
-
-
-      # -----------------------------------------------
-      # APPLY EXACT PLAN
-      # -----------------------------------------------
       - name: Terraform Apply
         working-directory: terraform
         run: |
-          terraform apply \
-            -input=false \
-            -auto-approve \
-            tfplan
+          terraform apply -input=false -auto-approve tfplan

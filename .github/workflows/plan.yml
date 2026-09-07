@@ -7,25 +7,50 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 env:
   AWS_REGION: ap-south-1
 
 jobs:
-  plan:
-    name: Terraform Plan
+  plan-and-filter:
+    name: Terraform Plan & Diff Detection
     runs-on: ubuntu-latest
+    
+    outputs:
+      eticket_changed: ${{ steps.filter.outputs.eticket }}
+      stickynotes_changed: ${{ steps.filter.outputs.stickynotes }}
 
     steps:
-      # ---------------------------------------------
-      # Checkout
-      # ---------------------------------------------
-      - name: Checkout
+      - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
-      # ---------------------------------------------
-      # AWS Credentials
-      # ---------------------------------------------
+      # -----------------------------------------------
+      # Check folder diff changes
+      # -----------------------------------------------
+      - name: Path Filter Configuration
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          base: 'HEAD~1'
+          filters: |
+            eticket:
+              - 'eticket-app/**'
+            stickynotes:
+              - 'stickynotes-app/**'
+
+      # Save folder change status into a file for Apply workflow
+      - name: Save changes status artifact
+        run: |
+          mkdir -p diff-status
+          echo "${{ steps.filter.outputs.eticket }}" > diff-status/eticket.txt
+          echo "${{ steps.filter.outputs.stickynotes }}" > diff-status/stickynotes.txt
+
+      # -----------------------------------------------
+      # AWS, Terraform Setup & Run Plan
+      # -----------------------------------------------
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -33,62 +58,22 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # ---------------------------------------------
-      # Terraform
-      # ---------------------------------------------
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-      # ---------------------------------------------
-      # Terraform Init
-      # ---------------------------------------------
-      - name: Terraform Init
-        working-directory: terraform
-        run: terraform init -input=false
-
-      # ---------------------------------------------
-      # Terraform Validate
-      # ---------------------------------------------
-      - name: Terraform Validate
-        working-directory: terraform
-        run: terraform validate
-
-      # ---------------------------------------------
-      # Terraform Plan
-      # ---------------------------------------------
-      - name: Terraform Plan
+      - name: Terraform Init & Plan
         working-directory: terraform
         run: |
-          terraform plan \
-            -input=false \
-            -out=tfplan \
-            -var="image_tag=${GITHUB_SHA}"
+          terraform init -input=false
+          terraform plan -input=false -out=tfplan
 
-      # ---------------------------------------------
-      # Show Plan
-      # ---------------------------------------------
-      - name: Terraform Show
-        working-directory: terraform
-        run: terraform show -no-color tfplan
-
-      # ---------------------------------------------
-      # Verify Plan
-      # ---------------------------------------------
-      - name: Verify Terraform Plan
-        working-directory: terraform
-        run: |
-          test -f tfplan
-
-          echo "Terraform plan created successfully:"
-          ls -lh tfplan
-
-      # ---------------------------------------------
-      # Upload Exact Plan
-      # ---------------------------------------------
-      - name: Upload Terraform Plan
+      # -----------------------------------------------
+      # Upload exact tfplan and diff status
+      # -----------------------------------------------
+      - name: Upload Plan & Diff Status
         uses: actions/upload-artifact@v4
         with:
           name: terraform-plan-${{ github.sha }}
-          path: terraform/tfplan
-          if-no-files-found: error
-          retention-days: 1
+          path: |
+            terraform/tfplan
+            diff-status/
