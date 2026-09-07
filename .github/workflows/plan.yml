@@ -27,7 +27,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 1. Path checking
       - name: Path Filter Configuration
         id: filter
         uses: dorny/paths-filter@v3
@@ -39,14 +38,12 @@ jobs:
             stickynotes:
               - 'stickynotes-app/**'
 
-      # 2. Saving status directly into temporary execution matrix
       - name: Save changes status file
         run: |
           mkdir -p diff-status
           echo "${{ steps.filter.outputs.eticket }}" > diff-status/eticket.txt
           echo "${{ steps.filter.outputs.stickynotes }}" > diff-status/stickynotes.txt
 
-      # 3. AWS & Terraform core logic integration
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -57,7 +54,6 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-      # 4. EXPLICIT OUT FILE GENERATION
       - name: Terraform Init & Plan Out
         working-directory: terraform
         run: |

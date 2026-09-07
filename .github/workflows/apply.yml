@@ -9,15 +9,10 @@ on:
 
 permissions:
   contents: read
-  actions: read   # Explicitly grants access to download cross-workflow out-file artifacts
-
 env:
   AWS_REGION: ap-south-1
 
 jobs:
-  # ==================================================
-  # 1. READ GENERATED BINARY META STATUS FROM PLAN
-  # ==================================================
   check-plan:
     name: Verify Out File Status
     runs-on: ubuntu-latest
@@ -51,9 +46,6 @@ jobs:
           echo "eticket=$(cat diff-status/eticket.txt)" >> "$GITHUB_OUTPUT"
           echo "stickynotes=$(cat diff-status/stickynotes.txt)" >> "$GITHUB_OUTPUT"
 
-  # ==================================================
-  # 2. RUNNERS BUILD SERVICES (Triggered conditionally)
-  # ==================================================
   eticket:
     needs: check-plan
     if: ${{ needs.check-plan.outputs.eticket_changed == 'true' }}
@@ -70,9 +62,6 @@ jobs:
       commit_sha: ${{ needs.check-plan.outputs.commit_sha }}
     secrets: inherit
 
-  # ==================================================
-  # 3. APPLY EXPLICITLY USING THE DOWNLOADED OUT FILE
-  # ==================================================
   apply:
     name: Terraform Apply Via tfplan Out File
     runs-on: ubuntu-latest
@@ -103,9 +92,6 @@ jobs:
         run: |
           terraform init -input=false
 
-      # -----------------------------------------------
-      # DOWNLOAD PRE-GENERATED OUT FILE
-      # -----------------------------------------------
       - name: Load Pre-generated tfplan Out File
         env:
           GH_TOKEN: ${{ github.token }}
@@ -118,9 +104,6 @@ jobs:
             --name "terraform-plan-${PLAN_SHA}" \
             --dir terraform
 
-      # -----------------------------------------------
-      # TRIGGER APPLY USING THE BINARY FILE DIRECTLY
-      # -----------------------------------------------
       - name: Execute Terraform Apply via tfplan
         working-directory: terraform
         run: |
