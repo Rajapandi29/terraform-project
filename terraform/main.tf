@@ -13,7 +13,6 @@ module "vpc" {
   single_nat_gateway  = true
 }
 
-
 module "eticket_ecr" {
   source = "git::https://github.com/Rajapandi29/terraform-modules.git//ecr?ref=v1.0.0"
 
@@ -47,8 +46,6 @@ module "eticket_ecr" {
   })
 }
 
-
-
 module "stickynotes_ecr" {
   source = "git::https://github.com/Rajapandi29/terraform-modules.git//ecr?ref=v1.0.0"
 
@@ -81,12 +78,10 @@ module "stickynotes_ecr" {
     ]
   })
 }
-
-
 module "alb" {
   source = "git::https://github.com/Rajapandi29/terraform-modules.git//alb?ref=v1.0.0"
 
-  name = "${var.name}-alb"
+  name = "terraform-alb"
 
   vpc_id  = module.vpc.vpc_id
   subnets = module.vpc.public_subnets
@@ -118,34 +113,43 @@ module "alb" {
     }
   }
 
+
   listeners = {
 
     http = {
       port     = 80
       protocol = "HTTP"
 
-      # Default = Sticky Notes
+
       forward = {
         target_group_key = "stickynotes"
       }
 
 
+
       rules = {
 
         eticket = {
+
           priority = 10
 
           actions = [
             {
-              type             = "forward"
-              target_group_key = "eticket"
+              order = 1
+
+              forward = {
+                target_group_key = "eticket"
+              }
             }
           ]
 
           conditions = [
             {
               path_pattern = {
-                values = ["/eticket-app", "/eticket-app/*"]
+                values = [
+                  "/eticket-app",
+                  "/eticket-app/*"
+                ]
               }
             }
           ]
@@ -154,7 +158,6 @@ module "alb" {
       }
     }
   }
-
 
 
   target_groups = {
@@ -185,7 +188,6 @@ module "alb" {
     }
 
 
-
     stickynotes = {
 
       name = "${var.name}-stickynotes-tg"
@@ -213,10 +215,8 @@ module "alb" {
   }
 }
 
-
 module "ecs" {
   source = "git::https://github.com/Rajapandi29/terraform-modules.git//ecs?ref=v1.0.0"
-
 
   cluster_name = "app-cluster"
 
@@ -268,7 +268,6 @@ module "ecs" {
       }
 
 
-
       load_balancer = {
 
         eticket = {
@@ -280,7 +279,6 @@ module "ecs" {
           target_group_arn = module.alb.target_groups["eticket"].arn
         }
       }
-
 
 
       create_task_definition = true
@@ -335,6 +333,7 @@ module "ecs" {
     }
 
 
+
     stickynotes = {
 
       create         = true
@@ -377,7 +376,6 @@ module "ecs" {
           ip_protocol = "-1"
         }
       }
-
 
 
       load_balancer = {
