@@ -1,31 +1,24 @@
-name: Eticket Docker Build Deploy
+name: Terraform Destroy
 
 on:
-  workflow_call:
-    inputs:
-      commit_sha:
-        required: true
-        type: string
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 env:
   AWS_REGION: ap-south-1
-  ECR_REPOSITORY: eticket-app-repo
-  ECS_CLUSTER: app-cluster
-  ECS_SERVICE: eticket-app-service
 
 jobs:
-  build-push:
-    name: Build and Push Eticket
+
+  destroy:
+    name: Destroy Terraform Infrastructure
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Exact Commit
+
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.commit_sha }}
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -34,43 +27,29 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
 
-      - name: Create ECR Repository if not exists
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init -input=false
+
+      - name: Terraform Destroy Plan
+        working-directory: terraform
         run: |
-          aws ecr describe-repositories \
-            --repository-names "$ECR_REPOSITORY" \
-            --region "$AWS_REGION" \
-          || aws ecr create-repository \
-            --repository-name "$ECR_REPOSITORY" \
-            --region "$AWS_REGION" \
-            --image-tag-mutability MUTABLE \
-            --image-scanning-configuration scanOnPush=true
+          terraform plan \
+            -destroy \
+            -out=destroy.tfplan
 
-      - name: Get ECR Repository URI
+      - name: Terraform Show Destroy Plan
+        working-directory: terraform
         run: |
-          ECR_URI=$(aws ecr describe-repositories \
-            --repository-names "$ECR_REPOSITORY" \
-            --region "$AWS_REGION" \
-            --query 'repositories[0].repositoryUri' \
-            --output text)
+          terraform show -no-color destroy.tfplan
 
-          echo "ECR_URI=$ECR_URI" >> "$GITHUB_ENV"
-
-          echo "ECR URI: $ECR_URI"
-
-      - name: Build Docker Image
+      - name: Terraform Destroy
+        working-directory: terraform
         run: |
-          docker build \
-            -t "$ECR_URI:${{ inputs.commit_sha }}" \
-            -t "$ECR_URI:latest" \
-            ./eticket-app
-
-      - name: Push Version Image
-        run: |
-          docker push "$ECR_URI:${{ inputs.commit_sha }}"
-
-      - name: Push Latest Image
-        run: |
-          docker push "$ECR_URI:latest"
+          terraform apply \
+            -input=false \
+            -auto-approve \
+            destroy.tfplan

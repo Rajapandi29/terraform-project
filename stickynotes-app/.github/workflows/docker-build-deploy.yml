@@ -1,4 +1,4 @@
-name: docker-build-deploy
+name: Stickynotes Docker Build Push Deploy
 
 on:
   push:
@@ -10,16 +10,18 @@ permissions:
 
 env:
   AWS_REGION: ap-south-1
-  ECR_REPOSITORY: sticky-notes-repo
+  ECR_REPOSITORY: stickynotes-app-repo
   ECS_CLUSTER: app-cluster
-  ECS_SERVICE: stickynotes-service
+  ECS_SERVICE: stickynotes-app-service
 
 jobs:
-  apply:
-    name: Build Push Deploy
+
+  build-push-deploy:
+    name: Stickynotes Build Push Deploy
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -30,29 +32,19 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-
-      - name: Terraform Init
-        working-directory: terraform
-        run: terraform init -upgrade
-
-      - name: Terraform Validate
-        working-directory: terraform
-        run: terraform validate
-
-      - name: Create ECR Repository
-        working-directory: terraform
-        run: |
-          terraform apply \
-            -auto-approve \
-            -target=module.ecr \
-            -var="image_tag=bootstrap"
-
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Get ECR Repository URI
+      - name: Create ECR Repository
+        run: |
+          aws ecr describe-repositories \
+            --repository-names "$ECR_REPOSITORY" \
+            --region "$AWS_REGION" \
+          || aws ecr create-repository \
+            --repository-name "$ECR_REPOSITORY" \
+            --region "$AWS_REGION"
+
+      - name: Get ECR URI
         run: |
           ECR_URI=$(aws ecr describe-repositories \
             --repository-names "$ECR_REPOSITORY" \
@@ -67,17 +59,27 @@ jobs:
           docker build \
             -t "$ECR_URI:${GITHUB_SHA}" \
             -t "$ECR_URI:latest" \
-            .
+            ./stickynotes-app
 
-      - name: Push Docker Image
+      - name: Push SHA Image
         run: |
           docker push "$ECR_URI:${GITHUB_SHA}"
+
+      - name: Push Latest Image
+        run: |
           docker push "$ECR_URI:latest"
 
-      - name: Deploy to ECS
-        working-directory: terraform
+      - name: Force ECS Deployment
         run: |
-          terraform apply \
-            -auto-approve \
-            -target=module.ecs \
-            -var="image_tag=${GITHUB_SHA}"  
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --force-new-deployment \
+            --region "$AWS_REGION"
+
+      - name: Wait for ECS Deployment
+        run: |
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE" \
+            --region "$AWS_REGION"

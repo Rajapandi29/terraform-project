@@ -16,8 +16,11 @@ env:
 
 jobs:
 
+  # ==================================================
+  # 1. CHECK TERRAFORM PLAN
+  # ==================================================
   check-plan:
-    name: Check Plan Workflow
+    name: Check Terraform Plan
     runs-on: ubuntu-latest
 
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
@@ -26,17 +29,18 @@ jobs:
       commit_sha: ${{ steps.commit.outputs.sha }}
 
     steps:
+
       - name: Get Plan Commit SHA
         id: commit
         run: |
           echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
 
 
-  # --------------------------------------------------
-  # 2. Build Eticket Docker image
-  # --------------------------------------------------
+  # ==================================================
+  # 2. BUILD + PUSH + DEPLOY ETICKET
+  # ==================================================
   eticket:
-    name: Build Eticket Image
+    name: Eticket Docker Build Push Deploy
 
     needs: check-plan
 
@@ -48,11 +52,11 @@ jobs:
     secrets: inherit
 
 
-  # --------------------------------------------------
-  # 3. Build Stickynotes Docker image
-  # --------------------------------------------------
+  # ==================================================
+  # 3. BUILD + PUSH + DEPLOY STICKYNOTES
+  # ==================================================
   stickynotes:
-    name: Build Stickynotes Image
+    name: Stickynotes Docker Build Push Deploy
 
     needs: check-plan
 
@@ -64,53 +68,59 @@ jobs:
     secrets: inherit
 
 
-  # --------------------------------------------------
-  # 4. Terraform Apply
-  # --------------------------------------------------
+  # ==================================================
+  # 4. TERRAFORM APPLY
+  # ==================================================
   apply:
-    name: Apply Terraform Plan
+    name: Terraform Apply
+    runs-on: ubuntu-latest
 
     needs:
       - check-plan
       - eticket
       - stickynotes
 
-    runs-on: ubuntu-latest
-
     steps:
 
-      # Checkout the SAME commit used by Terraform Plan
+      # -----------------------------------------------
+      # Checkout EXACT commit from Terraform Plan
+      # -----------------------------------------------
       - name: Checkout Exact Commit
         uses: actions/checkout@v4
-
         with:
           ref: ${{ needs.check-plan.outputs.commit_sha }}
 
 
-      # AWS login
+      # -----------------------------------------------
+      # AWS Credentials
+      # -----------------------------------------------
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
-
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
 
-      # Terraform
+      # -----------------------------------------------
+      # Setup Terraform
+      # -----------------------------------------------
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
 
+      # -----------------------------------------------
       # Terraform Init
+      # -----------------------------------------------
       - name: Terraform Init
         working-directory: terraform
-        run: terraform init
+        run: |
+          terraform init -input=false
 
 
-      # --------------------------------------------------
-      # Download EXACT tfplan from Terraform Plan run
-      # --------------------------------------------------
+      # -----------------------------------------------
+      # Download EXACT tfplan
+      # -----------------------------------------------
       - name: Download Terraform Plan
         env:
           GH_TOKEN: ${{ github.token }}
@@ -126,14 +136,14 @@ jobs:
             --dir terraform
 
 
-      # Verify tfplan exists
+      # -----------------------------------------------
+      # Verify Terraform Plan
+      # -----------------------------------------------
       - name: Verify Terraform Plan
         working-directory: terraform
-
         run: |
           if [ ! -f tfplan ]; then
-            echo "ERROR: tfplan file does not exist."
-            echo "Terraform apply is stopped."
+            echo "ERROR: tfplan does not exist"
             exit 1
           fi
 
@@ -141,17 +151,22 @@ jobs:
           ls -lh tfplan
 
 
-      # Display exact saved plan
+      # -----------------------------------------------
+      # Show EXACT Plan
+      # -----------------------------------------------
       - name: Terraform Show Plan
         working-directory: terraform
-
         run: |
           terraform show -no-color tfplan
 
 
-      # Apply EXACT saved plan
-      - name: Terraform Apply Exact Plan
+      # -----------------------------------------------
+      # APPLY EXACT PLAN
+      # -----------------------------------------------
+      - name: Terraform Apply
         working-directory: terraform
-
         run: |
-          terraform apply -auto-approve tfplan
+          terraform apply \
+            -input=false \
+            -auto-approve \
+            tfplan
