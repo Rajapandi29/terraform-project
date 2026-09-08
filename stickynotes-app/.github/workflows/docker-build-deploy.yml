@@ -1,6 +1,5 @@
 name: Stickynotes Docker Build Push Deploy
 
-# REUSABLE TRIGGER MATRIX CONFIG
 on:
   workflow_call:
     inputs:
