@@ -3,8 +3,8 @@ name: Stickynotes Docker Build Push
 on:
   workflow_call:
     push:
-      branches:
-        - main
+      paths:
+        - 'stickynotes-app/**'
 
 permissions:
   contents: read
