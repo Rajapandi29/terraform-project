@@ -4,7 +4,7 @@ on:
   workflow_call:
     push:
       paths:
-        - 'stickynotes-app/**'
+        - '.github/workflows/docker-build-deploy.yml'
 
 permissions:
   contents: read
