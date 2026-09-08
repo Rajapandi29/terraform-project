@@ -1,7 +1,6 @@
 name: Stickynotes Docker Build Push
 
 on:
-  workflow_call:
     push:
       paths:
         - '.github/workflows/docker-build-deploy.yml'
