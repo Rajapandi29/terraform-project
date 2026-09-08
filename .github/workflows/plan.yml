@@ -67,10 +67,5 @@ jobs:
           path: |
             terraform/tfplan
             diff-status/
-      - name: Eticket Docker Build Push Deploy
-        if: ${{ steps.filter.outputs.eticket == 'true' }}
-        uses: ./.github/workflows/docker-build-deploy.yml
-        with:
-          commit_sha: ${{ github.sha }}
-        secrets: inherit
+     
 
