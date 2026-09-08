@@ -174,13 +174,13 @@ module "alb" {
       create_attachment = false
 
       health_check = {
-        enabled             = true
-        path                = var.eticket_health_check_path
-        protocol            = "HTTP"
-        matcher             = "200-399"
-        interval            = 30
-        timeout             = 5
-        healthy_threshold   = 2
+        enabled           = true
+        path              = var.eticket_health_check_path
+        protocol          = "HTTP"
+        matcher           = "200-399"
+        interval          = 30
+        timeout           = 5
+        healthy_threshold = 2
         unhealthy_threshold = 3
       }
     }
@@ -199,12 +199,12 @@ module "alb" {
       create_attachment = false
 
       health_check = {
-        enabled             = true
-        path                = var.stickynotes_health_check_path
-        protocol            = "HTTP"
-        matcher             = "200-399"
-        interval            = 30
-        timeout             = 5
+        enabled           = true
+        path              = var.stickynotes_health_check_path
+        protocol          = "HTTP"
+        matcher            = "200-399"
+        interval           = 30
+        timeout            = 5
         healthy_threshold   = 2
         unhealthy_threshold = 3
       }
@@ -212,6 +212,21 @@ module "alb" {
   }
 }
 
+
+################################################################################
+# ALB Data Source
+################################################################################
+
+data "aws_lb" "terraform_alb" {
+  name = "terraform-alb"
+
+  depends_on = [module.alb]
+}
+
+
+################################################################################
+# ECS
+################################################################################
 
 module "ecs" {
   source = "git::https://github.com/Rajapandi29/terraform-modules.git//ecs?ref=v1.0.0"
@@ -426,6 +441,7 @@ module "ecs" {
 }
 
 
+
 module "sns" {
   source = "git::https://github.com/Rajapandi29/terraform-modules.git//sns?ref=v1.0.0"
 
@@ -465,13 +481,15 @@ resource "aws_cloudwatch_metric_alarm" "eticket_unhealthy" {
 
   dimensions = {
     TargetGroup  = module.alb.target_groups["eticket"].arn_suffix
-    LoadBalancer = module.alb.lb_arn_suffix
+    LoadBalancer = data.aws_lb.terraform_alb.arn_suffix
   }
 
   alarm_actions = [
     module.sns.topic_arn
   ]
 }
+
+
 
 resource "aws_cloudwatch_metric_alarm" "stickynotes_unhealthy" {
 
@@ -492,11 +510,10 @@ resource "aws_cloudwatch_metric_alarm" "stickynotes_unhealthy" {
 
   dimensions = {
     TargetGroup  = module.alb.target_groups["stickynotes"].arn_suffix
-    LoadBalancer = module.alb.lb_arn_suffix
+    LoadBalancer = data.aws_lb.terraform_alb.arn_suffix
   }
 
   alarm_actions = [
     module.sns.topic_arn
   ]
 }
-
