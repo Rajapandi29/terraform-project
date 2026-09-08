@@ -2,10 +2,9 @@ name: Stickynotes Docker Build Push Deploy
 
 on:
   workflow_call:
-    inputs:
-      commit_sha:
-        required: true
-        type: string
+    push:
+      branches:
+        - main
 
 permissions:
   contents: read
