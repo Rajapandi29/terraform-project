@@ -58,10 +58,8 @@ jobs:
         working-directory: terraform
         run: |
           terraform init -input=false
-          # Inga thaan -out flag moolama dynamic file out generate aaguthu
           terraform plan -input=false -out=tfplan
 
-      # 5. UPLOAD BINARY FILE AS ARTIFACT
       - name: Upload Plan Out File & Diffs
         uses: actions/upload-artifact@v4
         with:
@@ -69,3 +67,10 @@ jobs:
           path: |
             terraform/tfplan
             diff-status/
+      - name: Eticket Docker Build Push Deploy
+        if: ${{ steps.filter.outputs.eticket == 'true' }}
+        uses: ./.github/workflows/docker-build-deploy.yml
+        with:
+          commit_sha: ${{ github.sha }}
+        secrets: inherit
+
