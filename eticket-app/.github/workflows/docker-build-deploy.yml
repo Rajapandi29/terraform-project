@@ -1,12 +1,10 @@
 name: Eticket Docker Build Push Deploy
 
-# REUSABLE TRIGGER MATRIX CONFIG
 on:
   workflow_call:
-    inputs:
-      commit_sha:
-        required: true
-        type: string
+    push:
+      paths:
+        - '.github/workflows/docker-build-deploy.yml'
 
 permissions:
   contents: read
@@ -85,3 +83,6 @@ jobs:
             --cluster "$ECS_CLUSTER" \
             --services "$ECS_SERVICE" \
             --region "$AWS_REGION"
+
+      - name: docker build and push
+        run: docker
