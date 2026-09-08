@@ -1,10 +1,9 @@
 name: Eticket Docker Build Push Deploy
 
 on:
-  workflow_call:
-    push:
-      paths:
-        - '.github/workflows/docker-build-deploy.yml'
+  push:
+    paths:
+      - 'terraform/APPLY'
 
 permissions:
   contents: read
@@ -24,8 +23,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.commit_sha }} # Plan baseline snapshot reference exact fetch aagum
-
+          ref: ${{ inputs.commit_sha }} 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
