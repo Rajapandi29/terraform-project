@@ -1,4 +1,4 @@
-name: Stickynotes Docker Build Push Deploy
+name: Stickynotes Docker Build Push
 
 on:
   workflow_call:
