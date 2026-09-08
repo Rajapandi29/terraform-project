@@ -1,3 +1,4 @@
+```hcl
 module "vpc" {
   source = "git::https://github.com/Rajapandi29/terraform-modules.git//vpc?ref=v1.0.0"
 
@@ -10,8 +11,9 @@ module "vpc" {
   private_subnets = var.private_subnets
 
   enable_nat_gateway = true
-  single_nat_gateway  = true
+  single_nat_gateway = true
 }
+
 
 module "eticket_ecr" {
   source = "git::https://github.com/Rajapandi29/terraform-modules.git//ecr?ref=v1.0.0"
@@ -46,6 +48,7 @@ module "eticket_ecr" {
   })
 }
 
+
 module "stickynotes_ecr" {
   source = "git::https://github.com/Rajapandi29/terraform-modules.git//ecr?ref=v1.0.0"
 
@@ -78,6 +81,8 @@ module "stickynotes_ecr" {
     ]
   })
 }
+
+
 module "alb" {
   source = "git::https://github.com/Rajapandi29/terraform-modules.git//alb?ref=v1.0.0"
 
@@ -113,19 +118,15 @@ module "alb" {
     }
   }
 
-
   listeners = {
 
     http = {
       port     = 80
       protocol = "HTTP"
 
-
       forward = {
         target_group_key = "stickynotes"
       }
-
-
 
       rules = {
 
@@ -154,11 +155,9 @@ module "alb" {
             }
           ]
         }
-
       }
     }
   }
-
 
   target_groups = {
 
@@ -187,7 +186,6 @@ module "alb" {
       }
     }
 
-
     stickynotes = {
 
       name = "${var.name}-stickynotes-tg"
@@ -215,14 +213,13 @@ module "alb" {
   }
 }
 
+
 module "ecs" {
   source = "git::https://github.com/Rajapandi29/terraform-modules.git//ecs?ref=v1.0.0"
 
   cluster_name = "app-cluster"
 
-
   services = {
-
 
     eticket = {
 
@@ -241,7 +238,6 @@ module "ecs" {
 
       vpc_id = module.vpc.vpc_id
 
-
       security_group_ingress_rules = {
 
         alb = {
@@ -256,7 +252,6 @@ module "ecs" {
         }
       }
 
-
       security_group_egress_rules = {
 
         all = {
@@ -266,7 +261,6 @@ module "ecs" {
           ip_protocol = "-1"
         }
       }
-
 
       load_balancer = {
 
@@ -279,7 +273,6 @@ module "ecs" {
           target_group_arn = module.alb.target_groups["eticket"].arn
         }
       }
-
 
       create_task_definition = true
 
@@ -296,7 +289,6 @@ module "ecs" {
           cpu    = var.eticket_cpu
           memory = var.eticket_memory
 
-
           portMappings = [
             {
               containerPort = var.eticket_container_port
@@ -307,7 +299,6 @@ module "ecs" {
             }
           ]
 
-
           enable_cloudwatch_logging   = true
           create_cloudwatch_log_group = true
 
@@ -316,7 +307,6 @@ module "ecs" {
           cloudwatch_log_group_retention_in_days = 7
         }
       }
-
 
       cpu    = var.eticket_cpu
       memory = var.eticket_memory
@@ -331,7 +321,6 @@ module "ecs" {
 
       create_tasks_iam_role = true
     }
-
 
 
     stickynotes = {
@@ -351,7 +340,6 @@ module "ecs" {
 
       vpc_id = module.vpc.vpc_id
 
-
       security_group_ingress_rules = {
 
         alb = {
@@ -366,7 +354,6 @@ module "ecs" {
         }
       }
 
-
       security_group_egress_rules = {
 
         all = {
@@ -376,7 +363,6 @@ module "ecs" {
           ip_protocol = "-1"
         }
       }
-
 
       load_balancer = {
 
@@ -389,7 +375,6 @@ module "ecs" {
           target_group_arn = module.alb.target_groups["stickynotes"].arn
         }
       }
-
 
       create_task_definition = true
 
@@ -406,7 +391,6 @@ module "ecs" {
           cpu    = var.stickynotes_cpu
           memory = var.stickynotes_memory
 
-
           portMappings = [
             {
               containerPort = var.stickynotes_container_port
@@ -417,7 +401,6 @@ module "ecs" {
             }
           ]
 
-
           enable_cloudwatch_logging   = true
           create_cloudwatch_log_group = true
 
@@ -426,7 +409,6 @@ module "ecs" {
           cloudwatch_log_group_retention_in_days = 7
         }
       }
-
 
       cpu    = var.stickynotes_cpu
       memory = var.stickynotes_memory
@@ -443,7 +425,6 @@ module "ecs" {
     }
   }
 }
-
 
 
 module "sns" {
@@ -464,3 +445,59 @@ module "sns" {
     }
   }
 }
+
+
+resource "aws_cloudwatch_metric_alarm" "eticket_unhealthy" {
+
+  alarm_name = "${var.name}-eticket-unhealthy"
+
+  alarm_description = "E-ticket application target is unhealthy"
+
+  namespace   = "AWS/ApplicationELB"
+  metric_name = "UnHealthyHostCount"
+
+  statistic = "Maximum"
+
+  period             = 60
+  evaluation_periods = 2
+
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+
+  dimensions = {
+    TargetGroup  = module.alb.target_groups["eticket"].arn_suffix
+    LoadBalancer = module.alb.lb_arn_suffix
+  }
+
+  alarm_actions = [
+    module.sns.topic_arn
+  ]
+}
+
+resource "aws_cloudwatch_metric_alarm" "stickynotes_unhealthy" {
+
+  alarm_name = "${var.name}-stickynotes-unhealthy"
+
+  alarm_description = "StickyNotes application target is unhealthy"
+
+  namespace   = "AWS/ApplicationELB"
+  metric_name = "UnHealthyHostCount"
+
+  statistic = "Maximum"
+
+  period             = 60
+  evaluation_periods = 2
+
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+
+  dimensions = {
+    TargetGroup  = module.alb.target_groups["stickynotes"].arn_suffix
+    LoadBalancer = module.alb.lb_arn_suffix
+  }
+
+  alarm_actions = [
+    module.sns.topic_arn
+  ]
+}
+
